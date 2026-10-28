@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block page_title %}Privacy, Consent & Data Governance{% endblock %}
+
+{% block content %}
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  <!-- Privacy Configuration Form -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Privacy & Retention Policies</h2>
+    </div>
+    <form onsubmit="submitPrivacySettings(event)">
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="retain-video" {% if settings.retain_raw_video %}checked{% endif %}>
+          Retain Raw Video Recordings
+        </label>
+        <span style="font-size:11.5px; color:#64748b; margin-left:24px; display:block;">
+          Default: Disabled. When disabled, frames are analyzed in memory and immediately discarded.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="retain-audio" {% if settings.retain_raw_audio %}checked{% endif %}>
+          Retain Raw Classroom Audio
+        </label>
+        <span style="font-size:11.5px; color:#64748b; margin-left:24px; display:block;">
+          Default: Disabled. System extracts acoustic pressure and VAD intervals without storing audio waveforms.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="enable-transcription" {% if settings.enable_transcription %}checked{% endif %}>
+          Enable Offline Speech-to-Text Transcription
+        </label>
+        <span style="font-size:11.5px; color:#64748b; margin-left:24px; display:block;">
+          Requires local whisper model in <code>local_models/</code>. No external cloud speech APIs are ever called.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Data Retention Period (Days)</label>
+        <input type="number" id="retention-days" class="form-control" value="{{ settings.data_retention_days }}" min="1" max="365">
+        <span style="font-size:11.5px; color:#64748b; display:block; margin-top:4px;">
+          Granular 15-second observation windows older than this will be automatically or manually pruned.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="consent-required" {% if settings.consent_required %}checked{% endif %}>
+          Enforce Student Consent Verification
+        </label>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="triggerPurge()">Purge Expired Data Now</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Privacy Architecture Notice -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">Offline Security & Data Flow Principles</h2>
+    </div>
+    <div style="font-size:13px; color:#334155; line-height:1.6;">
+      <p style="margin-bottom:10px;">
+        <strong>1. Local Ingestion:</strong> All video and audio streams are processed exclusively on the local host. Zero network packets containing student media leave this device.
+      </p>
+      <p style="margin-bottom:10px;">
+        <strong>2. Anonymous Tracking:</strong> The vision pipeline tracks anonymous temporary track IDs during sessions. Identity matching occurs only upon manual instructor verification or consent enrollment.
+      </p>
+      <p style="margin-bottom:10px;">
+        <strong>3. Ephemeral Feature Extraction:</strong> Only derived physical measurements (yaw, pitch, displacement, VAD segments) are committed to SQLite. Raw camera frames are freed immediately after detection.
+      </p>
+      <p style="margin-bottom:10px;">
+        <strong>4. Auditability:</strong> Every manual attendance override, report generation, and student mapping creates an immutable audit log entry.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Audit Trail Table -->
+<div class="panel" style="margin-top:24px;">
+  <div class="panel-header">
+    <h2 class="panel-title">System Audit Log (Last 50 Events)</h2>
+  </div>
+  <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp (UTC)</th>
+          <th>Action</th>
+          <th>Target</th>
+          <th>User</th>
+          <th>Details</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody id="audit-log-tbody">
+        <tr><td colspan="6" style="text-align:center;">Loading audit trail...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadAuditLogs);
+
+async function loadAuditLogs() {
+  try {
+    const res = await fetch('/api/v1/settings/audit_logs?limit=50');
+    if (res.ok) {
+      const data = await res.json();
+      const tbody = document.getElementById('audit-log-tbody');
+      if (data.audit_logs && data.audit_logs.length > 0) {
+        tbody.innerHTML = data.audit_logs.map(l => `
+          <tr>
+            <td><code>${l.timestamp ? l.timestamp.replace('T', ' ').substring(0, 19) : '-'}</code></td>
+            <td><strong>${l.action}</strong></td>
+            <td>${l.target_type}</td>
+            <td>${l.username}</td>
+            <td>${l.details || '-'}</td>
+            <td><code>${l.ip_address}</code></td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#94a3b8;">No audit entries yet.</td></tr>';
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function submitPrivacySettings(e) {
+  e.preventDefault();
+  const payload = {
+    retain_raw_video: document.getElementById('retain-video').checked,
+    retain_raw_audio: document.getElementById('retain-audio').checked,
+    enable_transcription: document.getElementById('enable-transcription').checked,
+    data_retention_days: parseInt(document.getElementById('retention-days').value),
+    consent_required: document.getElementById('consent-required').checked,
+  };
+
+  try {
+    const res = await fetch('/api/v1/settings/privacy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Privacy settings updated', 'success');
+      loadAuditLogs();
+    } else {
+      showToast(data.error || 'Failed to update settings', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function triggerPurge() {
+  if (!confirm('Are you sure you want to permanently delete observation window records older than the retention period?')) {
+    return;
+  }
+  try {
+    const res = await fetch('/api/v1/settings/purge_data', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message, 'success');
+      loadAuditLogs();
+    } else {
+      showToast(data.error || 'Purge failed', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

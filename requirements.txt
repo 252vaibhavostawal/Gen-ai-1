@@ -1,0 +1,32 @@
+# Core Framework & Web
+Flask>=3.0.0
+Werkzeug>=3.0.0
+Flask-SQLAlchemy>=3.1.0
+Flask-SocketIO>=5.3.6
+python-socketio>=5.11.0
+python-engineio>=4.9.0
+simple-websocket>=1.0.0
+
+# Database & Migration
+SQLAlchemy>=2.0.0
+
+# Computer Vision & Image Processing
+opencv-python>=4.8.0
+mediapipe>=0.10.0; python_version < '3.13'
+numpy>=1.24.0
+scipy>=1.11.0
+Pillow>=10.0.0
+
+# Audio Processing
+sounddevice>=0.4.6
+webrtcvad-wheels>=2.0.10; sys_platform == 'win32'
+webrtcvad>=2.0.10; sys_platform != 'win32'
+
+# Reports & PDF Generation
+reportlab>=4.0.0
+
+# Testing & Utilities
+pytest>=7.4.0
+pytest-cov>=4.1.0
+python-dotenv>=1.0.0
+requests>=2.31.0

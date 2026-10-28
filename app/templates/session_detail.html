@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block page_title %}Session: {{ session.title }}{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <span class="badge badge-{{ session.status }}">{{ session.status.upper() }}</span>
+      <h2 style="font-size:22px; font-weight:700; margin-top:6px;">{{ session.title }}</h2>
+      <div style="font-size:13px; color:#64748b; margin-top:4px;">
+        Course: <strong>{{ session.course.name if session.course else 'General Session' }}</strong> |
+        Date: <strong>{{ session.date.strftime('%Y-%m-%d') if session.date else 'Today' }}</strong> |
+        Source: <strong>{{ session.input_source_type.upper() }}</strong>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      {% if session.status in ['created', 'stopped', 'paused'] %}
+        <button class="btn btn-primary" onclick="triggerAction('start')">▶ Start Session</button>
+      {% elif session.status == 'running' %}
+        <button class="btn btn-secondary" onclick="triggerAction('pause')">⏸ Pause</button>
+        <button class="btn btn-danger" onclick="triggerAction('stop')">⏹ Stop</button>
+      {% endif %}
+      {% if session.status != 'finalized' %}
+        <button class="btn btn-secondary" onclick="triggerAction('finalize')">✓ Finalize & Analyze</button>
+      {% endif %}
+      <a href="{{ url_for('main.live_monitor_view', session_id=session.id) }}" class="btn btn-primary">Live Monitor Cockpit</a>
+    </div>
+  </div>
+
+  {% if session.objectives %}
+  <div style="background:#f1f5f9; padding:12px 16px; border-radius:6px; font-size:13px; color:#334155; margin-bottom:16px;">
+    <strong>Instructional Objectives:</strong> {{ session.objectives }}
+  </div>
+  {% endif %}
+
+  <!-- Metrics Cards -->
+  <div class="metrics-grid" style="margin-top:16px;">
+    <div class="metric-card">
+      <span class="metric-label">Confirmed Present</span>
+      <span class="metric-value">{{ stats.present_count }}</span>
+      <span class="metric-sub">Sustained presence satisfied</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Late Arrivals</span>
+      <span class="metric-value">{{ stats.late_count }}</span>
+      <span class="metric-sub">> Configured threshold</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Unconfirmed Tracks</span>
+      <span class="metric-value">{{ stats.unconfirmed_count }}</span>
+      <span class="metric-sub">Accumulating observation time</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Attendance Rate</span>
+      <span class="metric-value">{{ stats.attendance_percentage }}%</span>
+      <span class="metric-sub">{{ stats.calculation_formula }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation Hub -->
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+  <a href="{{ url_for('main.attendance_view', session_id=session.id) }}" class="panel" style="text-decoration:none; color:inherit; display:block; transition: transform 0.15s ease;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--primary); margin-bottom:6px;">📋 Attendance Logs & Overrides</h3>
+    <p style="font-size:13px; color:#64748b;">View timestamped presence logs, individual observation durations, and manual instructor corrections.</p>
+  </a>
+
+  <a href="{{ url_for('main.engagement_view', session_id=session.id) }}" class="panel" style="text-decoration:none; color:inherit; display:block; transition: transform 0.15s ease;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--secondary); margin-bottom:6px;">📈 Multimodal Engagement Analytics</h3>
+    <p style="font-size:13px; color:#64748b;">Explore synchronized head-pose orientation, physical movement, and classroom verbal activity timelines.</p>
+  </a>
+
+  <a href="{{ url_for('main.suggestions_view', session_id=session.id) }}" class="panel" style="text-decoration:none; color:inherit; display:block; transition: transform 0.15s ease;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--accent); margin-bottom:6px;">💡 AI Pedagogical Suggestions</h3>
+    <p style="font-size:13px; color:#64748b;">Review evidence-based teaching insights, observations, confidence ratings, and methodological limitations.</p>
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function triggerAction(action) {
+  try {
+    const res = await fetch(`/api/v1/sessions/{{ session.id }}/${action}`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || `Session ${action} complete`, 'success');
+      setTimeout(() => window.location.reload(), 700);
+    } else {
+      showToast(data.error || 'Action failed', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

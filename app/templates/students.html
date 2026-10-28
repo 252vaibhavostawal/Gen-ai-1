@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block page_title %}Student Directory & Consent Management{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div style="display:flex; gap:12px; align-items:center;">
+      <input type="text" id="search-input" class="form-control" placeholder="Search by name or student ID..." style="width: 280px;" oninput="filterStudents()">
+      <select id="batch-filter" class="form-control" style="width: 180px;" onchange="filterStudents()">
+        <option value="">All Batches</option>
+        {% for b in batches %}
+          <option value="{{ b }}">{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-secondary" onclick="openModal('import-csv-modal')">Import CSV</button>
+      <button class="btn btn-primary" onclick="openModal('add-student-modal')">+ Add Student</button>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Roll / Student ID</th>
+          <th>Student Name</th>
+          <th>Batch</th>
+          <th>Email</th>
+          <th>Consent Status</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="students-tbody">
+        {% for s in students %}
+        <tr data-name="{{ s.name|lower }}" data-id="{{ s.student_id|lower }}" data-batch="{{ s.batch }}">
+          <td><strong>{{ s.student_id }}</strong></td>
+          <td>{{ s.name }}</td>
+          <td>{{ s.batch }}</td>
+          <td>{{ s.email or '-' }}</td>
+          <td>
+            {% if s.consent_given %}
+              <span class="badge badge-present">CONSENT RECORDED</span>
+            {% else %}
+              <span class="badge badge-absent">PENDING</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{% if s.enrollment_status == 'active' %}present{% else %}absent{% endif %}">
+              {{ s.enrollment_status.upper() }}
+            </span>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center; color:#94a3b8;">No registered students found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add Student Modal -->
+<div id="add-student-modal" class="modal">
+  <div class="modal-content">
+    <div class="panel-header">
+      <h3 class="panel-title">Add New Student</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal('add-student-modal')">&times;</button>
+    </div>
+    <form onsubmit="submitAddStudent(event)">
+      <div class="form-group">
+        <label class="form-label">Student ID / Roll Number *</label>
+        <input type="text" id="add-student-id" class="form-control" required placeholder="e.g. STU104">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input type="text" id="add-student-name" class="form-control" required placeholder="e.g. Alex Morgan">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Batch / Section</label>
+        <input type="text" id="add-student-batch" class="form-control" value="CS-2026">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="add-student-email" class="form-control" placeholder="alex@example.edu">
+      </div>
+      <div class="form-group">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="add-student-consent" checked>
+          Student / Guardian consent confirmed for local attendance verification
+        </label>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('add-student-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Student</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Import CSV Modal -->
+<div id="import-csv-modal" class="modal">
+  <div class="modal-content">
+    <div class="panel-header">
+      <h3 class="panel-title">Bulk Import Students via CSV</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal('import-csv-modal')">&times;</button>
+    </div>
+    <form onsubmit="submitImportCSV(event)">
+      <p style="font-size:12.5px; color:#64748b; margin-bottom:12px;">
+        CSV file should contain headers: <code>student_id, name, email, batch</code>.
+      </p>
+      <div class="form-group">
+        <input type="file" id="csv-file-input" class="form-control" accept=".csv" required>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('import-csv-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Upload & Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterStudents() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const batch = document.getElementById('batch-filter').value;
+  const rows = document.querySelectorAll('#students-tbody tr');
+
+  rows.forEach(r => {
+    const name = r.getAttribute('data-name') || '';
+    const sid = r.getAttribute('data-id') || '';
+    const b = r.getAttribute('data-batch') || '';
+
+    const matchSearch = !search || name.includes(search) || sid.includes(search);
+    const matchBatch = !batch || b === batch;
+    r.style.display = (matchSearch && matchBatch) ? '' : 'none';
+  });
+}
+
+async function submitAddStudent(e) {
+  e.preventDefault();
+  const payload = {
+    student_id: document.getElementById('add-student-id').value,
+    name: document.getElementById('add-student-name').value,
+    batch: document.getElementById('add-student-batch').value,
+    email: document.getElementById('add-student-email').value,
+    consent_given: document.getElementById('add-student-consent').checked,
+  };
+
+  try {
+    const res = await fetch('/api/v1/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Student registered successfully', 'success');
+      setTimeout(() => window.location.reload(), 600);
+    } else {
+      showToast(data.errors ? data.errors.join(', ') : data.error, 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function submitImportCSV(e) {
+  e.preventDefault();
+  const input = document.getElementById('csv-file-input');
+  if (!input.files || input.files.length === 0) return;
+
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+
+  try {
+    const res = await fetch('/api/v1/students/import_csv', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message, 'success');
+      setTimeout(() => window.location.reload(), 800);
+    } else {
+      showToast(data.error || 'Import failed', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block page_title %}AI Pedagogical Insights: {{ session.title }}{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">AI Teaching Suggestions & Evidence</h2>
+      <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
+        Grounding insights in observed visual orientation, movement variability, and acoustic participation.
+      </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" onclick="generateSuggestions()">⚡ Generate New Insights</button>
+      <a href="{{ url_for('main.session_detail_view', session_id=session.id) }}" class="btn btn-secondary">Back to Session</a>
+    </div>
+  </div>
+
+  {% for sug in suggestions %}
+  <div class="panel" style="background:#ffffff; border-left: 4px solid var(--primary); margin-bottom: 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+      <div>
+        <span class="badge badge-present">Confidence: {{ sug.confidence_level }}</span>
+        <span class="badge badge-unconfirmed" style="margin-left:6px;">Engine: {{ sug.source_engine }}</span>
+      </div>
+      <div style="font-size:12px; color:#94a3b8;">
+        Generated {{ sug.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if sug.created_at else '' }}
+      </div>
+    </div>
+
+    <h3 style="font-size:15px; font-weight:700; color:#0f172a; margin-bottom:8px;">Observed Classroom Pattern:</h3>
+    <p style="font-size:13.5px; color:#334155; margin-bottom:14px; line-height:1.6;">
+      {{ sug.pattern_summary }}
+    </p>
+
+    <h4 style="font-size:13.5px; font-weight:700; color:var(--primary); margin-bottom:8px;">Actionable Teaching Suggestions:</h4>
+    <ul style="margin: 0 0 16px 20px; font-size:13.5px; color:#334155; line-height:1.6;">
+      {% for item in sug.get_suggestions() %}
+        <li style="margin-bottom:6px;">{{ item }}</li>
+      {% endfor %}
+    </ul>
+
+    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px; font-size:12px; color:#475569; margin-bottom:12px;">
+      <strong>Empirical Evidence & Telemetry:</strong>
+      <div style="margin-top:4px;">
+        {% for k, v in sug.get_evidence().items() %}
+          <span style="display:inline-block; margin-right:16px;">
+            <code>{{ k }}</code>: <strong>{{ v }}</strong>
+          </span>
+        {% endfor %}
+      </div>
+      {% if sug.confidence_explanation %}
+        <div style="margin-top:6px; font-style:italic; color:#64748b;">
+          Basis: {{ sug.confidence_explanation }}
+        </div>
+      {% endif %}
+    </div>
+
+    {% if sug.limitations_note %}
+    <div style="font-size:11.5px; color:#94a3b8; font-style:italic;">
+      <strong>Pedagogical Limitation:</strong> {{ sug.limitations_note }}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div style="text-align:center; padding:36px; color:#94a3b8;">
+    <p style="font-size:15px; margin-bottom:12px;">No automated suggestions generated yet for this session.</p>
+    <button class="btn btn-primary" onclick="generateSuggestions()">Analyze Session & Generate Suggestions</button>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function generateSuggestions() {
+  showToast('Analyzing session telemetry...', 'info');
+  try {
+    const res = await fetch('/api/v1/sessions/{{ session.id }}/suggestions/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefer_llm: false }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('New pedagogical suggestions generated!', 'success');
+      setTimeout(() => window.location.reload(), 700);
+    } else {
+      showToast(data.error || 'Failed to generate suggestions', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

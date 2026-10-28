@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block page_title %}Reports & Exports Center{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title">Download Attendance & Engagement Reports</h2>
+      <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
+        Generate offline-first CSV and PDF documents with complete metadata, timestamps, and audit notes.
+      </div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Session ID</th>
+          <th>Session Title</th>
+          <th>Course</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th>Available Downloads</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td><strong>#{{ s.id }}</strong></td>
+          <td><strong>{{ s.title }}</strong></td>
+          <td>{{ s.course.name if s.course else 'General Session' }}</td>
+          <td>{{ s.date.strftime('%Y-%m-%d') if s.date else 'Today' }}</td>
+          <td><span class="badge badge-{{ s.status }}">{{ s.status.upper() }}</span></td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <a href="/api/v1/reports/attendance/{{ s.id }}" class="btn btn-sm btn-secondary" title="Export Attendance CSV">
+                Attendance CSV
+              </a>
+              <a href="/api/v1/reports/engagement/{{ s.id }}" class="btn btn-sm btn-secondary" title="Export Timeline CSV">
+                Engagement CSV
+              </a>
+              <a href="/api/v1/reports/pdf/{{ s.id }}" class="btn btn-sm btn-primary" title="Generate Complete PDF">
+                Printable PDF
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center; color:#94a3b8;">No sessions available for reporting.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

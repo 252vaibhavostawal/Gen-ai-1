@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block page_title %}Classroom Sessions{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title">All Conducted & Scheduled Sessions</h2>
+    <button class="btn btn-primary" onclick="openModal('new-session-modal')">+ Create Session</button>
+  </div>
+
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Session ID</th>
+          <th>Session Title</th>
+          <th>Course</th>
+          <th>Date</th>
+          <th>Input Source</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td><strong>#{{ s.id }}</strong></td>
+          <td>
+            <a href="{{ url_for('main.session_detail_view', session_id=s.id) }}" style="color:var(--primary); font-weight:600; text-decoration:none;">
+              {{ s.title }}
+            </a>
+          </td>
+          <td>{{ s.course.name if s.course else 'General Session' }}</td>
+          <td>{{ s.date.strftime('%Y-%m-%d') if s.date else 'Today' }}</td>
+          <td><span style="font-size:12px; color:#475569; text-transform:capitalize;">{{ s.input_source_type }}</span></td>
+          <td>
+            <span class="badge badge-{{ s.status }}">{{ s.status.upper() }}</span>
+          </td>
+          <td>
+            <a href="{{ url_for('main.session_detail_view', session_id=s.id) }}" class="btn btn-sm btn-secondary">Details</a>
+            {% if s.status == 'running' %}
+              <a href="{{ url_for('main.live_monitor_view', session_id=s.id) }}" class="btn btn-sm btn-primary">Live Monitor</a>
+            {% else %}
+              <a href="{{ url_for('main.live_monitor_view', session_id=s.id) }}" class="btn btn-sm btn-secondary">Open Cockpit</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center; color:#94a3b8;">No sessions found. Create one above to get started.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Session Modal -->
+<div id="new-session-modal" class="modal">
+  <div class="modal-content">
+    <div class="panel-header">
+      <h3 class="panel-title">Create Classroom Session</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal('new-session-modal')">&times;</button>
+    </div>
+    <form onsubmit="submitNewSession(event)">
+      <div class="form-group">
+        <label class="form-label">Session Title *</label>
+        <input type="text" id="session-title" class="form-control" required placeholder="e.g. Lecture 4: Neural Architecture">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Associated Course</label>
+        <select id="session-course" class="form-control">
+          {% for c in courses %}
+            <option value="{{ c.id }}">{{ c.code }} - {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Expected Duration (minutes)</label>
+        <input type="number" id="session-duration" class="form-control" value="60" min="1" max="360">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Video Input Source</label>
+        <select id="session-source-type" class="form-control" onchange="toggleMediaFileInput()">
+          <option value="webcam">Webcam (Live Camera / Synthetic fallback)</option>
+          <option value="video_file">Local Video Recording File</option>
+          <option value="synthetic">Consented Synthetic Test Stream</option>
+        </select>
+      </div>
+      <div class="form-group" id="media-upload-group" style="display:none;">
+        <label class="form-label">Upload Local Recorded Video (.mp4 / .avi)</label>
+        <input type="file" id="video-file-input" class="form-control" accept="video/*">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Pedagogical Objectives (Optional)</label>
+        <textarea id="session-objectives" class="form-control" rows="2" placeholder="e.g. Introduce backpropagation concepts and assess student engagement during discussion segments."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('new-session-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Session</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleMediaFileInput() {
+  const type = document.getElementById('session-source-type').value;
+  document.getElementById('media-upload-group').style.display = (type === 'video_file') ? 'block' : 'none';
+}
+
+async function submitNewSession(e) {
+  e.preventDefault();
+  let videoPath = null;
+  const sourceType = document.getElementById('session-source-type').value;
+
+  // Handle local video file upload if selected
+  if (sourceType === 'video_file') {
+    const fileInput = document.getElementById('video-file-input');
+    if (fileInput.files.length > 0) {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      showToast('Uploading local media file...', 'info');
+      const upRes = await fetch('/api/v1/sessions/upload_media', { method: 'POST', body: fd });
+      const upData = await upRes.json();
+      if (!upRes.ok) {
+        showToast(upData.error || 'Media upload failed', 'error');
+        return;
+      }
+      videoPath = upData.file_path;
+    }
+  }
+
+  const payload = {
+    title: document.getElementById('session-title').value,
+    course_id: document.getElementById('session-course').value || null,
+    expected_duration_minutes: document.getElementById('session-duration').value,
+    input_source_type: sourceType,
+    video_file_path: videoPath,
+    objectives: document.getElementById('session-objectives').value,
+  };
+
+  try {
+    const res = await fetch('/api/v1/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Session created successfully', 'success');
+      setTimeout(() => {
+        window.location.href = `/sessions/${data.session.id}`;
+      }, 700);
+    } else {
+      showToast(data.errors ? data.errors.join(', ') : data.error, 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+</script>
+{% endblock %}
